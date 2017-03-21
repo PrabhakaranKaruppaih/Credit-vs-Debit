@@ -1,0 +1,80 @@
+'Variables required for Validations
+Dim ValidationBook As Workbook
+Dim DataSheet As Worksheet  'Data
+Dim CriteriaSheet As Worksheet  'Worksheet having the advanced criteria
+Dim Filtered_DataSheet As Worksheet
+Dim CurrencyCodes As Range
+Dim CriteriaRange As Range
+Dim ResultPage As Worksheet
+Dim Difference As Double
+'Validation Variable list ends
+
+xlApp.Visible = True
+Set xlbook = xlApp.Workbooks.Open(fname, UpdateLinks:=False)
+xlbook.Activate
+
+Set ValidationBook = xlApp.Workbooks.Add
+With ValidationBook
+    .Parent.Visible = True 'Application
+    'Set DataSheet = xlbook.Sheets(1).Copy(After:=ValidationBook.Sheets(ValidationBook.Sheets.Count))
+    'Alternate way for the above code
+    xlbook.Sheets(1).Copy After:=ValidationBook.Sheets(ValidationBook.Sheets.Count)
+    Set DataSheet = ValidationBook.Sheets(ValidationBook.Sheets.Count)
+        DataSheet.Name = "DataSheet"
+    'alternate way ends
+    For Each Sheet In ValidationBook.Sheets
+        If Sheet.Name <> DataSheet.Name Then Sheet.Delete
+    Next Sheet
+    Set CriteriaSheet = .Parent.Sheets.Add(After:=.Sheets(.Sheets.Count))
+        CriteriaSheet.Name = "CriteriaSheet"
+    Set Filtered_DataSheet = .Parent.Sheets.Add(After:=.Sheets(.Sheets.Count))
+        Filtered_DataSheet.Name = "Filtered_Datasheet"
+    Set ResultPage = .Parent.Sheets.Add(After:=.Sheets(.Sheets.Count))
+        ResultPage.Name = "ResultPage"
+    'Validation Procedure
+    With DataSheet
+        .Activate   'To Monitor
+        Set CurrencyCodes = .UsedRange.Columns("L")
+        'Preparing the Criteria for Advanced Filter
+        With CriteriaSheet
+            'Building the Criteria Range
+            CurrencyCodes.Copy CriteriaSheet.Cells(1)
+            CriteriaSheet.Activate 'To Monitor
+            CriteriaSheet.Cells(1).CurrentRegion.RemoveDuplicates Columns:=1, Header:=xlYes 'Removing the Duplicates
+            Set CriteriaRange = .UsedRange
+            'Criteria Range Built
+
+            For Each Row In CriteriaRange
+                If Row.Row = 1 Then
+                    GoTo Skip_Row
+                End If
+                'Filter and Delete
+                DataSheet.Activate 'To Monitor
+                DataSheet.UsedRange.AdvancedFilter xlFilterCopy, CriteriaRange.Rows(2), Filtered_DataSheet.Cells(1) 'Filter based on the first 2 rows
+                Filtered_DataSheet.Activate
+                Filtered_DataSheet.Rows(1).Delete
+                'USD and Non-USD
+                Filtered_DataSheet.Activate
+                If Row.Cells(1).Value = "USD" Then
+                    ResultPage.Activate
+                    ResultPage.Cells(1).FormulaArray = "=SUM(" & "Filtered_Datasheet!Q:Q" & ")-SUM(" & "Filtered_Datasheet!R:R" & ")"
+                Else
+                    'Non-USD
+                    ResultPage.Activate
+                    ResultPage.Cells(1).FormulaArray = "=SUM(" & "Filtered_Datasheet!O:O*Filtered_Datasheet!Q:Q" & ")-SUM(" & "Filtered_Datasheet!O:O*Filtered_Datasheet!R:R" & ")"
+                End If
+                If ResultPage.Cells(1).Value <> 0 Then
+                    ValidationBook.Close savechanges:=False
+                    MsgBox "Accounted Amount Not Tallies"
+                    Exit Sub
+                End If
+                Row.Delete  'Deleting the processed criteria
+                Filtered_DataSheet.Cells.ClearContents 'Sanitization
+Skip_Row:
+            Next Row
+        End With
+    End With
+    .Close savechanges:=False
+End With
+'Validation Procedure Ends
+End Sub
